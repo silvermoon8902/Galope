@@ -1,0 +1,6 @@
+# Galope - enruta todo a index.php salvo archivos reales (Apache).
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+RewriteRule ^ index.php [L]
