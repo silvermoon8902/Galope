@@ -45,10 +45,26 @@ function fmt_dt($value): string
     return $ts ? date('d/m/Y H:i', $ts) : (string) $value;
 }
 
+/** Convierte una fecha a formato datetime-local para los inputs de formulario. */
+function dtlocal($value): string
+{
+    $ts = strtotime((string) $value);
+    return $ts ? date('Y-m-d\TH:i', $ts) : '';
+}
+
 /** Formatea un numero entero con punto de miles (estilo es-AR). */
 function fmt_num($n): string
 {
     return number_format((float) $n, 0, ',', '.');
+}
+
+/** Iniciales de un nombre, para los avatares. */
+function initials(string $name): string
+{
+    $parts = preg_split('/\s+/', trim($name)) ?: [];
+    $first = mb_substr($parts[0] ?? '', 0, 1);
+    $last  = count($parts) > 1 ? mb_substr($parts[count($parts) - 1], 0, 1) : '';
+    return mb_strtoupper($first . $last);
 }
 
 // --- Render de vistas ---

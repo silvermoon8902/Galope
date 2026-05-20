@@ -154,10 +154,24 @@ function seed(): void
     mkPrediction($players[1], $r2, [$h2[0], $h2[2], $h2[6]]);
     mkPrediction($players[2], $r2, [$h2[3], $h2[0], $h2[1]]);
 
-    // --- Carrera 3: programada (en 2 dias, predicciones aun cerradas) ---
-    $r3 = mkRace('Handicap de Primavera', 'Hipodromo de La Plata', 1600,
+    // --- Carrera 3: bloqueada (cerro hace 30 min, falta cargar el resultado) ---
+    $r3 = mkRace('Premio Independencia', 'Hipodromo de Palermo', 1800,
+        date('Y-m-d H:i:s', $now - 1500), date('Y-m-d H:i:s', $now - 1800), 'open');
+    $h3 = mkHorses($r3, [
+        ['Lucero del Alba', 'J. Medina'],
+        ['Bravio', 'A. Rocha'],
+        ['Gran Capitan', 'M. Duarte'],
+        ['Nube Roja', 'P. Sosa'],
+        ['Salto del Tigre', 'R. Vega'],
+        ['Mistral', 'N. Cabrera'],
+    ]);
+    mkPrediction($players[0], $r3, [$h3[0], $h3[1], $h3[2]]);
+    mkPrediction($players[3], $r3, [$h3[2], $h3[0], $h3[5]]);
+
+    // --- Carrera 4: programada (en 2 dias, predicciones aun cerradas) ---
+    $r4 = mkRace('Handicap de Primavera', 'Hipodromo de La Plata', 1600,
         date('Y-m-d H:i:s', $now + 172800), date('Y-m-d H:i:s', $now + 172500), 'scheduled');
-    mkHorses($r3, [
+    mkHorses($r4, [
         ['Nube Roja', 'P. Sosa'],
         ['Salto del Tigre', 'R. Vega'],
         ['Mistral', 'N. Cabrera'],
