@@ -9,12 +9,12 @@ if (!defined('GALOPE_ROOT')) {
     define('GALOPE_ROOT', dirname(__DIR__));
 }
 
+// config/config.php para desarrollo local; si no existe, se toma la
+// configuracion de las variables de entorno (despliegue gestionado).
 $configFile = GALOPE_ROOT . '/config/config.php';
-if (!is_file($configFile)) {
-    http_response_code(500);
-    exit('Falta config/config.php. Copia config/config.example.php y completalo.');
-}
-$GLOBALS['galope_config'] = require $configFile;
+$GLOBALS['galope_config'] = is_file($configFile)
+    ? require $configFile
+    : require GALOPE_ROOT . '/config/env.php';
 
 date_default_timezone_set($GLOBALS['galope_config']['timezone'] ?? 'UTC');
 
