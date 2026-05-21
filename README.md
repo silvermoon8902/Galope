@@ -60,6 +60,23 @@ php -S localhost:8000 -t public public/index.php
 
 Abrir `http://localhost:8000`.
 
+## Despliegue en Railway
+
+El repositorio incluye un `Dockerfile` (PHP 8.3 + Apache) y `railway.json`.
+La configuracion de la base se toma de variables de entorno cuando
+`config/config.php` no existe (ver `config/env.php`).
+
+1. En railway.app: **New Project → Deploy from GitHub repo** y elegir el
+   repositorio `Galope`. Railway detecta el `Dockerfile` y construye la imagen.
+2. En el proyecto: **New → Database → Add MySQL**.
+3. En el servicio de la app, pestana **Variables**: agregar
+   `DATABASE_URL` con el valor de referencia `${{MySQL.MYSQL_URL}}`.
+4. Railque vuelve a desplegar. El entrypoint espera a la base, crea el esquema
+   y carga los datos de ejemplo en el primer arranque.
+5. En **Settings → Networking → Generate Domain** para obtener la URL publica.
+
+Cada `git push` a la rama `main` dispara un nuevo despliegue automatico.
+
 ## Cuentas de ejemplo
 
 Las crea `bin/migrate.php`:
