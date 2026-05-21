@@ -71,7 +71,7 @@ La configuracion de la base se toma de variables de entorno cuando
 2. En el proyecto: **New → Database → Add MySQL**.
 3. En el servicio de la app, pestana **Variables**: agregar
    `DATABASE_URL` con el valor de referencia `${{MySQL.MYSQL_URL}}`.
-4. Railque vuelve a desplegar. El entrypoint espera a la base, crea el esquema
+4. Railway vuelve a desplegar. El entrypoint espera a la base, crea el esquema
    y carga los datos de ejemplo en el primer arranque.
 5. En **Settings → Networking → Generate Domain** para obtener la URL publica.
 
