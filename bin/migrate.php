@@ -11,12 +11,11 @@ declare(strict_types=1);
 
 define('GALOPE_ROOT', dirname(__DIR__));
 
+// config/config.php para desarrollo local; si no existe, variables de entorno.
 $configFile = GALOPE_ROOT . '/config/config.php';
-if (!is_file($configFile)) {
-    fwrite(STDERR, "Falta config/config.php. Copia config/config.example.php.\n");
-    exit(1);
-}
-$cfg = require $configFile;
+$cfg = is_file($configFile)
+    ? require $configFile
+    : require GALOPE_ROOT . '/config/env.php';
 date_default_timezone_set($cfg['timezone'] ?? 'UTC');
 
 require GALOPE_ROOT . '/app/Database.php';
