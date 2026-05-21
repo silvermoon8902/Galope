@@ -1,0 +1,6 @@
+.git
+.gitignore
+db/*.sqlite
+db/*.sqlite-journal
+config/config.php
+*.log
