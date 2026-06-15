@@ -318,4 +318,5 @@ footer{text-align:center;color:var(--muted);font-size:12.5px;padding:26px 20px 3
   .user .name{display:none}
   .form-grid,.form-grid-3,.pv{grid-template-columns:1fr}
   .horse-rows .hrow{grid-template-columns:1fr 1fr;gap:8px}
+  .modes{grid-template-columns:1fr}
 }
