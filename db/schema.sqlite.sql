@@ -35,9 +35,10 @@ CREATE TABLE predictions (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   race_id        INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+  mode           TEXT NOT NULL CHECK (mode IN ('full','dual','smart')),
   pick1_horse_id INTEGER NOT NULL,
-  pick2_horse_id INTEGER NOT NULL,
-  pick3_horse_id INTEGER NOT NULL,
+  pick2_horse_id INTEGER,
+  pick3_horse_id INTEGER,
   points_awarded INTEGER,
   created_at     TEXT NOT NULL,
   updated_at     TEXT NOT NULL,
@@ -47,21 +48,11 @@ CREATE TABLE predictions (
 CREATE TABLE race_results (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   race_id         INTEGER NOT NULL UNIQUE REFERENCES races(id) ON DELETE CASCADE,
-  first_horse_id  INTEGER NOT NULL,
-  second_horse_id INTEGER NOT NULL,
-  third_horse_id  INTEGER NOT NULL,
+  winner_horse_id INTEGER NOT NULL,
+  dividend        REAL NOT NULL,
   source          TEXT NOT NULL DEFAULT 'manual',
   entered_by      INTEGER,
   entered_at      TEXT NOT NULL
-);
-
-CREATE TABLE scoring_rules (
-  rule_key    TEXT PRIMARY KEY,
-  label       TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  points      INTEGER NOT NULL DEFAULT 0,
-  sort_order  INTEGER NOT NULL DEFAULT 0,
-  updated_at  TEXT NOT NULL
 );
 
 CREATE TABLE settings (
