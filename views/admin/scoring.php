@@ -1,37 +1,47 @@
-<h1 class="page-title">Reglas de puntuacion</h1>
-<div class="page-sub">Define cuantos puntos vale cada acierto. Las reglas se cambian desde aca, sin tocar codigo.</div>
+<h1 class="page-title">Reglas del juego</h1>
+<div class="page-sub">Modalidades y formula de puntuacion. Las reglas son las definidas con el cliente.</div>
 
-<form method="post" action="<?= e(base('/admin/scoring')) ?>" id="rules-form" class="form-card">
-  <?= csrf_field() ?>
+<div class="panel">
+  <h3>Modalidades de juego</h3>
+  <div class="sub">Por cada carrera, el jugador elige UNA modalidad. Todas se juegan unicamente al caballo ganador.</div>
 
-  <?php foreach ($rules as $rule): ?>
+  <?php foreach ($modes as $key => $m): ?>
     <div class="rule">
       <div class="rl">
-        <?= e($rule['label']) ?>
-        <small><?= e($rule['description']) ?></small>
+        <?= e($m['label']) ?>
+        <small><?= e($m['description']) ?></small>
       </div>
-      <input type="number" min="0" name="points[<?= e($rule['rule_key']) ?>]"
-             data-key="<?= e($rule['rule_key']) ?>" value="<?= (int) $rule['points'] ?>">
-      <div class="unit">puntos</div>
+      <div class="mode-stakes-inline"><?= implode(' + ', $m['stakes']) ?> pts</div>
     </div>
   <?php endforeach; ?>
+</div>
+
+<div class="panel">
+  <h3>Calculo de puntos</h3>
+  <div class="sub">La formula que aplica el motor a cada jugada cuando se carga el resultado.</div>
+
+  <p style="font-size:14px;line-height:1.7">
+    Cuando se publica el dividendo oficial del hipodromo del caballo ganador, los puntos del jugador son:
+  </p>
 
   <div class="pv">
-    <div class="pv-card">
-      <div class="pv-lbl">Podio perfecto (1-2-3 exacto)</div>
-      <div class="pv-val"><span id="pvPerfect">0</span> <span>puntos</span></div>
-    </div>
-    <div class="pv-card">
-      <div class="pv-lbl">Solo acierta el ganador</div>
-      <div class="pv-val"><span id="pvWinner">0</span> <span>puntos</span></div>
+    <div class="pv-card" style="grid-column:1 / -1;text-align:center">
+      <div class="pv-lbl">Formula</div>
+      <div class="pv-val" style="font-size:22px">
+        puntos apostados al ganador
+        <span style="color:var(--muted);font-weight:600">x</span>
+        dividendo oficial
+      </div>
     </div>
   </div>
 
-  <p class="muted" style="font-size:12.5px;margin-bottom:14px">
-    La vista previa se actualiza al instante. Las reglas guardadas se aplican a las carreras
-    que se resuelvan de ahora en mas; para volver a puntuar una carrera ya finalizada,
-    se puede corregir su resultado.
+  <p style="font-size:13px;color:var(--muted);margin-top:14px">
+    Si el caballo ganador no esta entre los caballos elegidos, la jugada suma cero, sin importar
+    la modalidad ni cuantos caballos se hayan elegido.
   </p>
 
-  <button type="submit" class="btn">Guardar reglas</button>
-</form>
+  <div style="background:#f7f4ec;border-left:3px solid var(--gold);padding:12px 14px;border-radius:0 8px 8px 0;margin-top:14px;font-size:13.5px">
+    <b>Ejemplo:</b> el jugador apuesta Full Point con 50 puntos al caballo 4.
+    El 4 gana con dividendo oficial 5. El jugador suma 50 x 5 = 250 puntos en esa carrera.
+  </div>
+</div>
