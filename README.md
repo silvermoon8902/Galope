@@ -1,26 +1,44 @@
 # Galope
 
-Juego de predicciones de carreras de caballos. Los jugadores arman el podio de
-cada carrera (1.er, 2.do y 3.er puesto), suman puntos segun aciertan y compiten
-en una tabla de clasificacion. Incluye un panel de administracion para gestionar
-carreras, resultados, reglas de puntuacion y usuarios.
+Juego de apuesta por puntos sobre carreras de caballos. Por cada carrera, el
+jugador elige una modalidad de juego, distribuye sus 50 puntos entre uno, dos o
+tres caballos, y apuesta unicamente al ganador. Si su caballo gana, los puntos
+apostados se multiplican por el dividendo oficial del hipodromo.
 
-## El nucleo del proyecto: la maquinaria de confianza
+## Reglas del juego
 
-Un juego de predicciones vive de la confianza. Tres piezas la sostienen y son
-el centro del codigo:
+Por cada carrera el jugador elige UNA modalidad. Todas se juegan unicamente al
+caballo ganador; el segundo y el tercer puesto no entran en el calculo.
+
+- **Full Point** : 50 puntos a 1 caballo.
+- **Dual Point** : 25 puntos a cada uno de 2 caballos.
+- **Smart Point** : 30 + 15 + 5 puntos a 3 caballos distintos.
+
+Cuando se publica el resultado oficial, el motor calcula:
+
+```
+puntos del jugador = (puntos apostados al caballo ganador) x (dividendo oficial)
+```
+
+Si el caballo ganador no esta entre los caballos elegidos, la jugada suma cero.
+
+Ejemplo: el jugador apuesta Full Point con 50 puntos al caballo 4. El 4 gana con
+dividendo oficial 5. El jugador suma 50 x 5 = 250 puntos en esa carrera.
+
+## La maquinaria de confianza
+
+Tres piezas sostienen el juego y son el centro del codigo:
 
 1. **Bloqueo de predicciones.** Cuando llega la hora de cierre de una carrera,
-   ninguna prediccion puede crearse ni modificarse. Esto se decide en el
-   servidor (`RaceService::predictionsOpen()` y la verificacion dentro de
-   `PlayerController::predict()`), nunca en el navegador. La cuenta regresiva en
-   pantalla es solo informativa.
-2. **Motor de puntuacion configurable.** Cuanto vale cada acierto se define en
-   la tabla `scoring_rules` y se edita desde el panel, sin tocar codigo
-   (`app/Scoring.php`).
-3. **Carga de resultados confiable.** Al cargar el resultado oficial de una
-   carrera, el motor evalua todas las predicciones en una sola transaccion
-   atomica y actualiza la clasificacion (`RaceService::loadResult()`).
+   ninguna jugada puede crearse ni modificarse. Esto se decide en el servidor
+   (`RaceService::predictionsOpen()` y la verificacion dentro de
+   `PlayerController::predict()`), nunca en el navegador.
+2. **Motor de puntuacion auditable.** Toda la formula vive en `app/Scoring.php`:
+   modalidades, stakes y el calculo `stake_en_ganador * dividendo`. Una sola
+   funcion, sin sorpresas.
+3. **Carga de resultados atomica.** Al cargar ganador + dividendo, el motor
+   evalua todas las jugadas de esa carrera en una sola transaccion y actualiza
+   la clasificacion (`RaceService::loadResult()`).
 
 ## Stack
 
