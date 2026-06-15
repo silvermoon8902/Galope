@@ -19,7 +19,7 @@ class PlayerController
 
         // Ultima carrera puntuada del jugador.
         $recent = Database::one(
-            "SELECT p.points_awarded, r.id AS race_id, r.name AS race_name,
+            "SELECT p.points_awarded, p.mode, r.id AS race_id, r.name AS race_name,
                     r.racetrack, r.distance_m
                FROM predictions p
                JOIN races r ON r.id = p.race_id
@@ -58,9 +58,14 @@ class PlayerController
         $breakdown = [];
         if ($result !== null && $myPrediction !== null) {
             $breakdown = Scoring::breakdown(
-                [$myPrediction['pick1_horse_id'], $myPrediction['pick2_horse_id'], $myPrediction['pick3_horse_id']],
-                [$result['first_horse_id'], $result['second_horse_id'], $result['third_horse_id']],
-                RaceService::scoringRules()
+                (string) $myPrediction['mode'],
+                [
+                    $myPrediction['pick1_horse_id'],
+                    $myPrediction['pick2_horse_id'],
+                    $myPrediction['pick3_horse_id'],
+                ],
+                (int) $result['winner_horse_id'],
+                (float) $result['dividend']
             );
         }
 
@@ -72,15 +77,16 @@ class PlayerController
             'myPrediction' => $myPrediction,
             'result'       => $result,
             'breakdown'    => $breakdown,
+            'modes'        => Scoring::modes(),
         ]);
     }
 
     /**
-     * Registra o modifica una prediccion.
+     * Registra o modifica la prediccion de una carrera.
      *
      * PUNTO DE INTEGRIDAD DEL JUEGO: el servidor verifica que las predicciones
-     * sigan abiertas en este preciso instante. Si la carrera ya cerro, la
-     * jugada se rechaza, sin importar lo que diga el navegador.
+     * sigan abiertas en este instante. Si la carrera ya cerro, la jugada se
+     * rechaza, sin importar lo que diga el navegador.
      */
     public function predict(): void
     {
@@ -100,13 +106,29 @@ class PlayerController
             redirect('/race?id=' . $raceId);
         }
 
-        $picks = [
+        $mode  = (string) ($_POST['mode'] ?? '');
+        $modes = Scoring::modes();
+        if (!isset($modes[$mode])) {
+            flash('error', 'Selecciona una modalidad de juego valida.');
+            redirect('/race?id=' . $raceId);
+        }
+        $required = Scoring::horseCount($mode);
+
+        // Hasta tres picks; nos quedamos con los que correspondan a la modalidad.
+        $picksRaw = [
             (int) ($_POST['pick1'] ?? 0),
             (int) ($_POST['pick2'] ?? 0),
             (int) ($_POST['pick3'] ?? 0),
         ];
-        if (in_array(0, $picks, true) || count(array_unique($picks)) !== 3) {
-            flash('error', 'Elegi tres caballos distintos para tu podio.');
+        $picks = array_slice($picksRaw, 0, $required);
+        foreach ($picks as $p) {
+            if ($p === 0) {
+                flash('error', 'Elegi los ' . $required . ' caballos que pide la modalidad ' . Scoring::modeLabel($mode) . '.');
+                redirect('/race?id=' . $raceId);
+            }
+        }
+        if (count(array_unique($picks)) !== count($picks)) {
+            flash('error', 'No podes apostar al mismo caballo dos veces dentro de la misma modalidad.');
             redirect('/race?id=' . $raceId);
         }
 
@@ -118,23 +140,26 @@ class PlayerController
             }
         }
 
+        // Completa hasta 3 columnas con null para guardar.
+        $picksFull = array_pad($picks, 3, null);
+
         $existing = $this->predictionFor((int) $user['id'], $raceId);
         if ($existing !== null) {
             Database::run(
                 'UPDATE predictions
-                    SET pick1_horse_id = ?, pick2_horse_id = ?, pick3_horse_id = ?, updated_at = ?
+                    SET mode = ?, pick1_horse_id = ?, pick2_horse_id = ?, pick3_horse_id = ?, updated_at = ?
                   WHERE id = ?',
-                [$picks[0], $picks[1], $picks[2], now(), $existing['id']]
+                [$mode, $picksFull[0], $picksFull[1], $picksFull[2], now(), $existing['id']]
             );
-            flash('success', 'Tu prediccion fue actualizada.');
+            flash('success', 'Tu jugada fue actualizada.');
         } else {
             Database::run(
                 'INSERT INTO predictions
-                    (user_id, race_id, pick1_horse_id, pick2_horse_id, pick3_horse_id, points_awarded, created_at, updated_at)
-                 VALUES (?,?,?,?,?,?,?,?)',
-                [$user['id'], $raceId, $picks[0], $picks[1], $picks[2], null, now(), now()]
+                    (user_id, race_id, mode, pick1_horse_id, pick2_horse_id, pick3_horse_id, points_awarded, created_at, updated_at)
+                 VALUES (?,?,?,?,?,?,?,?,?)',
+                [$user['id'], $raceId, $mode, $picksFull[0], $picksFull[1], $picksFull[2], null, now(), now()]
             );
-            flash('success', 'Tu prediccion fue registrada.');
+            flash('success', 'Tu jugada fue registrada.');
         }
         redirect('/race?id=' . $raceId);
     }
@@ -154,7 +179,7 @@ class PlayerController
         require_login();
         $user = current_user();
         $history = Database::all(
-            "SELECT p.points_awarded, p.created_at,
+            "SELECT p.points_awarded, p.created_at, p.mode,
                     r.id AS race_id, r.name AS race_name, r.racetrack,
                     r.predictions_close_at, r.status AS race_status
                FROM predictions p
