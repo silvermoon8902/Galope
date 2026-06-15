@@ -32,13 +32,18 @@ CREATE TABLE horses (
   CONSTRAINT fk_horses_race FOREIGN KEY (race_id) REFERENCES races(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Una prediccion por carrera. mode = modalidad elegida:
+--   'full'  -> 50 puntos a 1 caballo  (pick1 obligatorio)
+--   'dual'  -> 25 + 25 a 2 caballos   (pick1, pick2 obligatorios)
+--   'smart' -> 30 + 15 + 5 a 3 caballos (pick1, pick2, pick3 obligatorios)
 CREATE TABLE predictions (
   id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id        INT UNSIGNED NOT NULL,
   race_id        INT UNSIGNED NOT NULL,
+  mode           ENUM('full','dual','smart') NOT NULL,
   pick1_horse_id INT UNSIGNED NOT NULL,
-  pick2_horse_id INT UNSIGNED NOT NULL,
-  pick3_horse_id INT UNSIGNED NOT NULL,
+  pick2_horse_id INT UNSIGNED NULL,
+  pick3_horse_id INT UNSIGNED NULL,
   points_awarded INT NULL,
   created_at     DATETIME NOT NULL,
   updated_at     DATETIME NOT NULL,
@@ -47,25 +52,17 @@ CREATE TABLE predictions (
   CONSTRAINT fk_pred_race FOREIGN KEY (race_id) REFERENCES races(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- El resultado oficial: el caballo ganador y el dividendo del hipodromo.
+-- El motor de puntuacion calcula: stake_en_ganador * dividend.
 CREATE TABLE race_results (
   id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   race_id         INT UNSIGNED NOT NULL UNIQUE,
-  first_horse_id  INT UNSIGNED NOT NULL,
-  second_horse_id INT UNSIGNED NOT NULL,
-  third_horse_id  INT UNSIGNED NOT NULL,
+  winner_horse_id INT UNSIGNED NOT NULL,
+  dividend        DECIMAL(8,2) NOT NULL,
   source          VARCHAR(20) NOT NULL DEFAULT 'manual',
   entered_by      INT UNSIGNED NULL,
   entered_at      DATETIME NOT NULL,
   CONSTRAINT fk_result_race FOREIGN KEY (race_id) REFERENCES races(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE scoring_rules (
-  rule_key    VARCHAR(40)  PRIMARY KEY,
-  label       VARCHAR(160) NOT NULL,
-  description VARCHAR(255) NOT NULL DEFAULT '',
-  points      INT NOT NULL DEFAULT 0,
-  sort_order  INT NOT NULL DEFAULT 0,
-  updated_at  DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE settings (
