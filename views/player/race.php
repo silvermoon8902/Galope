@@ -7,7 +7,9 @@ foreach ($horses as $h) {
 $hn = static function ($id) use ($byId) {
     return isset($byId[(int) $id]) ? $byId[(int) $id]['name'] : '#' . (int) $id;
 };
-$medal = ['g', 's', 'b'];
+$fmtDiv = static function ($v) {
+    return rtrim(rtrim(number_format((float) $v, 2, ',', '.'), '0'), ',');
+};
 ?>
 
 <a class="muted" href="<?= e(base('/')) ?>">&larr; Volver al inicio</a>
@@ -33,20 +35,50 @@ $medal = ['g', 's', 'b'];
   <div class="race-body">
 
     <?php if ($effective === 'open'): ?>
+      <?php
+        $currentMode = $myPrediction ? (string) $myPrediction['mode'] : '';
+        $prePicks = $myPrediction
+            ? array_values(array_filter([
+                $myPrediction['pick1_horse_id'],
+                $myPrediction['pick2_horse_id'],
+                $myPrediction['pick3_horse_id'],
+            ], static fn($v) => $v !== null))
+            : [];
+      ?>
       <?php if ($myPrediction): ?>
-        <div class="notice locked" style="margin-bottom:14px">Ya tenes una prediccion cargada. Podes cambiarla hasta el cierre.</div>
+        <div class="notice locked" style="margin-bottom:14px">
+          Ya tenes una jugada en modalidad <b><?= e(Scoring::modeLabel($currentMode)) ?></b>. Podes cambiarla hasta el cierre.
+        </div>
       <?php endif; ?>
-      <div class="instruct">Elegi tu podio: toca los caballos en orden, primero el ganador, despues el segundo y el tercero. Tu prediccion queda bloqueada cuando termina la cuenta regresiva.</div>
 
-      <?php $pre = $myPrediction
-          ? implode(',', [$myPrediction['pick1_horse_id'], $myPrediction['pick2_horse_id'], $myPrediction['pick3_horse_id']])
-          : ''; ?>
-      <form id="predict-form" method="post" action="<?= e(base('/predict')) ?>" data-pre="<?= e($pre) ?>">
+      <div class="instruct">
+        Elegi una modalidad de juego y despues los caballos correspondientes. Tu jugada queda bloqueada cuando termina la cuenta regresiva.
+      </div>
+
+      <form id="predict-form" method="post" action="<?= e(base('/predict')) ?>"
+            data-pre-mode="<?= e($currentMode) ?>"
+            data-pre-picks="<?= e(implode(',', $prePicks)) ?>">
         <?= csrf_field() ?>
         <input type="hidden" name="race_id" value="<?= (int) $race['id'] ?>">
+        <input type="hidden" name="mode" id="modeInput" value="">
         <input type="hidden" name="pick1" id="pick1">
         <input type="hidden" name="pick2" id="pick2">
         <input type="hidden" name="pick3" id="pick3">
+
+        <div class="modes" id="modes">
+          <?php foreach ($modes as $key => $m): ?>
+            <div class="mode-card" data-mode="<?= e($key) ?>" data-horses="<?= count($m['stakes']) ?>">
+              <div class="mode-name"><?= e($m['label']) ?></div>
+              <div class="mode-stakes"><?= implode(' + ', $m['stakes']) ?> puntos</div>
+              <div class="mode-desc"><?= e($m['short']) ?></div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+
+        <div class="slots" id="slots" style="display:none">
+          <div class="slots-title">Tus apuestas</div>
+          <div class="slots-row" id="slotsRow"></div>
+        </div>
 
         <div id="horse-list">
           <?php foreach ($horses as $h): ?>
@@ -63,9 +95,9 @@ $medal = ['g', 's', 'b'];
         </div>
 
         <div class="confirm-row">
-          <div class="pick-summary" id="pickSummary">Todavia no elegiste tu podio.</div>
+          <div class="pick-summary" id="pickSummary">Elegi una modalidad para empezar.</div>
           <button class="btn" id="confirmBtn" type="submit" data-lock-on-close disabled>
-            <?= $myPrediction ? 'Actualizar prediccion' : 'Confirmar prediccion' ?>
+            <?= $myPrediction ? 'Actualizar jugada' : 'Confirmar jugada' ?>
           </button>
         </div>
         <div class="notice locked" id="lock-msg" style="display:none;margin-top:12px">
@@ -75,55 +107,71 @@ $medal = ['g', 's', 'b'];
 
     <?php elseif ($effective === 'finished' && $result): ?>
       <div class="section-title">Resultado oficial</div>
-      <div class="podium">
-        <div class="pod g"><span class="medal">1</span> <?= e($hn($result['first_horse_id'])) ?></div>
-        <div class="pod s"><span class="medal">2</span> <?= e($hn($result['second_horse_id'])) ?></div>
-        <div class="pod b"><span class="medal">3</span> <?= e($hn($result['third_horse_id'])) ?></div>
+      <div class="winner-card">
+        <div class="winner-trophy">&#9733;</div>
+        <div class="winner-info">
+          <div class="winner-name"><?= e($hn($result['winner_horse_id'])) ?></div>
+          <div class="winner-meta">Ganador &middot; dividendo oficial <b><?= e($fmtDiv($result['dividend'])) ?></b></div>
+        </div>
       </div>
 
       <?php if ($myPrediction): ?>
-        <?php
-          $resOrder = [$result['first_horse_id'], $result['second_horse_id'], $result['third_horse_id']];
-          $myPicks  = [$myPrediction['pick1_horse_id'], $myPrediction['pick2_horse_id'], $myPrediction['pick3_horse_id']];
-        ?>
-        <div class="section-title">Tu prediccion</div>
-        <div class="podium">
-          <?php foreach ($myPicks as $i => $pid): $exact = (int) $resOrder[$i] === (int) $pid; ?>
-            <div class="pod <?= $medal[$i] ?>">
-              <span class="medal"><?= $i + 1 ?></span> <?= e($hn($pid)) ?>
-              <span class="hit <?= $exact ? 'ok' : 'no' ?>"><?= $exact ? 'Acertaste' : 'Fallaste' ?></span>
+        <?php $modeKey = (string) $myPrediction['mode']; ?>
+        <div class="section-title">Tu jugada en <?= e(Scoring::modeLabel($modeKey)) ?></div>
+        <div class="bd">
+          <?php foreach ($breakdown as $line): ?>
+            <div class="bd-row<?= $line['is_winner'] ? ' win' : '' ?>">
+              <span>
+                <span class="stake-pill"><?= $line['stake'] ?> pts</span>
+                <?= e($hn($line['horse_id'])) ?>
+              </span>
+              <?php if ($line['is_winner']): ?>
+                <b>+<?= $line['points'] ?></b>
+              <?php else: ?>
+                <span class="muted">no gano</span>
+              <?php endif; ?>
             </div>
           <?php endforeach; ?>
         </div>
-
-        <div class="section-title">Como sumaste tus puntos</div>
-        <?php if ($breakdown): ?>
-          <?php foreach ($breakdown as $line): ?>
-            <div class="bd-row"><span><?= e($line['label']) ?></span><b>+<?= (int) $line['points'] ?></b></div>
-          <?php endforeach; ?>
-        <?php else: ?>
-          <div class="muted" style="font-size:13px;padding:8px 0">Esta vez tu prediccion no sumo puntos.</div>
-        <?php endif; ?>
-        <div class="bd-total"><span>Total de la carrera</span><b><?= fmt_num((int) $myPrediction['points_awarded']) ?> puntos</b></div>
+        <div class="bd-total">
+          <span>Total: <?= count($breakdown) ?> apuesta(s) por dividendo <?= e($fmtDiv($result['dividend'])) ?></span>
+          <b><?= fmt_num((int) $myPrediction['points_awarded']) ?> puntos</b>
+        </div>
       <?php else: ?>
-        <div class="notice">No cargaste una prediccion para esta carrera.</div>
+        <div class="notice">No cargaste jugada para esta carrera.</div>
       <?php endif; ?>
 
     <?php elseif ($effective === 'locked'): ?>
       <div class="notice locked">Las predicciones de esta carrera estan cerradas. Esperando que se cargue el resultado oficial.</div>
       <?php if ($myPrediction): ?>
-        <div class="section-title" style="margin-top:16px">Tu prediccion (bloqueada)</div>
-        <div class="podium">
-          <?php foreach ([$myPrediction['pick1_horse_id'], $myPrediction['pick2_horse_id'], $myPrediction['pick3_horse_id']] as $i => $pid): ?>
-            <div class="pod <?= $medal[$i] ?>"><span class="medal"><?= $i + 1 ?></span> <?= e($hn($pid)) ?></div>
+        <?php
+          $modeKey = (string) $myPrediction['mode'];
+          $stakes = Scoring::stakes($modeKey);
+          $rawPicks = [$myPrediction['pick1_horse_id'], $myPrediction['pick2_horse_id'], $myPrediction['pick3_horse_id']];
+          $myPicks = [];
+          foreach ($rawPicks as $i => $pid) {
+              if ($pid !== null) {
+                  $myPicks[] = ['id' => (int) $pid, 'stake' => $stakes[$i] ?? 0];
+              }
+          }
+        ?>
+        <div class="section-title" style="margin-top:16px">Tu jugada (bloqueada) en <?= e(Scoring::modeLabel($modeKey)) ?></div>
+        <div class="bd">
+          <?php foreach ($myPicks as $pick): ?>
+            <div class="bd-row">
+              <span>
+                <span class="stake-pill"><?= $pick['stake'] ?> pts</span>
+                <?= e($hn($pick['id'])) ?>
+              </span>
+            </div>
           <?php endforeach; ?>
         </div>
       <?php else: ?>
-        <div class="notice" style="margin-top:10px">No llegaste a cargar una prediccion para esta carrera.</div>
+        <div class="notice" style="margin-top:10px">No llegaste a cargar una jugada para esta carrera.</div>
       <?php endif; ?>
 
     <?php else: /* scheduled */ ?>
-      <div class="notice">Las predicciones de esta carrera todavia no abrieron. Pronto vas a poder cargar tu podio.</div>
+      <div class="notice">Las predicciones de esta carrera todavia no abrieron. Pronto vas a poder elegir tu modalidad y caballos.</div>
       <div class="section-title" style="margin-top:16px">Competidores</div>
       <?php foreach ($horses as $h): ?>
         <div class="horse">
