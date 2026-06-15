@@ -2,93 +2,121 @@
 /**
  * Motor de puntuacion de Galope.
  *
- * Toda la logica de "cuantos puntos vale una prediccion" vive aca. Las reglas
- * son configurables (tabla scoring_rules); este motor solo las aplica. No
- * depende de la base de datos: recibe la prediccion, el resultado y las reglas.
+ * Reglas del juego (definidas por el cliente):
+ *
+ *  - Por cada carrera el jugador elige UNA modalidad de juego:
+ *      Full Point  : 50 puntos a 1 caballo.
+ *      Dual Point  : 25 puntos a cada uno de 2 caballos.
+ *      Smart Point : 30 + 15 + 5 puntos a 3 caballos distintos.
+ *
+ *  - Todas las modalidades se juegan UNICAMENTE al ganador de la carrera.
+ *    El segundo y el tercer puesto no entran en el calculo.
+ *
+ *  - Si el caballo ganador esta entre los caballos elegidos, el puntaje es:
+ *      (puntos apostados a ese caballo) * (dividendo oficial del hipodromo)
+ *
+ *  - Si el ganador no esta entre los caballos elegidos, el jugador suma cero.
+ *
+ *  Ejemplo: Full Point con 50 puntos al caballo 4, el 4 gana con dividendo 5,
+ *  el jugador suma 50 * 5 = 250 puntos en esa carrera.
  */
 class Scoring
 {
-    /**
-     * Reglas por defecto que se cargan al instalar.
-     * clave => [etiqueta, descripcion, puntos, orden].
-     */
-    public static function defaultRules(): array
+    /** Modalidades disponibles con sus stakes y cantidad de caballos. */
+    public static function modes(): array
     {
         return [
-            'exact_1' => ['Acertar el 1.er puesto', 'El caballo ganador, en su posicion exacta', 50, 1],
-            'exact_2' => ['Acertar el 2.do puesto', 'Posicion exacta', 30, 2],
-            'exact_3' => ['Acertar el 3.er puesto', 'Posicion exacta', 20, 3],
-            'bonus_exact_podium' => ['Bonus: podio exacto', 'Los tres caballos en el orden correcto', 40, 4],
-            'bonus_any_order'    => ['Bonus: podio completo', 'Los tres caballos del podio, en cualquier orden', 15, 5],
-            'misplaced'          => ['Caballo del podio fuera de lugar', 'Acertado, pero en otra posicion', 5, 6],
+            'full'  => [
+                'label'       => 'Full Point',
+                'short'       => 'Riesgo alto, premio alto',
+                'description' => '50 puntos a un solo caballo.',
+                'stakes'      => [50],
+            ],
+            'dual'  => [
+                'label'       => 'Dual Point',
+                'short'       => 'Riesgo medio',
+                'description' => '25 puntos a cada uno de dos caballos.',
+                'stakes'      => [25, 25],
+            ],
+            'smart' => [
+                'label'       => 'Smart Point',
+                'short'       => 'Riesgo bajo, premio escalonado',
+                'description' => '30 + 15 + 5 puntos a tres caballos distintos.',
+                'stakes'      => [30, 15, 5],
+            ],
         ];
     }
 
-    private static array $ordinals = ['1.er', '2.do', '3.er'];
-
-    /**
-     * Calcula los puntos de una prediccion contra el resultado oficial.
-     *
-     * @param array $pred   IDs de caballo elegidos, en orden [1ro, 2do, 3ro].
-     * @param array $result IDs de caballo del resultado, en orden [1ro, 2do, 3ro].
-     * @param array $rules  Mapa clave_de_regla => puntos.
-     */
-    public static function score(array $pred, array $result, array $rules): int
+    public static function modeLabel(string $mode): string
     {
-        $total = 0;
-        foreach (self::breakdown($pred, $result, $rules) as $line) {
-            $total += $line['points'];
-        }
-        return $total;
+        return self::modes()[$mode]['label'] ?? $mode;
+    }
+
+    /** Cantidad de caballos que se deben elegir para una modalidad. */
+    public static function horseCount(string $mode): int
+    {
+        return count(self::stakes($mode));
+    }
+
+    /** Stakes (puntos apostados) ordenados por posicion (pick1, pick2, pick3). */
+    public static function stakes(string $mode): array
+    {
+        return self::modes()[$mode]['stakes'] ?? [];
+    }
+
+    /** Puntos apostados en la posicion dada (1, 2 o 3) de la modalidad. */
+    public static function stakeAt(string $mode, int $position): int
+    {
+        $stakes = self::stakes($mode);
+        return (int) ($stakes[$position - 1] ?? 0);
     }
 
     /**
-     * Desglose legible de la puntuacion: lista de [etiqueta, puntos].
-     * Sirve para mostrarle al jugador exactamente por que sumo lo que sumo.
+     * Calcula los puntos de una prediccion:
+     *   apuesta_en_el_ganador * dividendo_oficial.
+     *
+     * @param string $mode      'full' | 'dual' | 'smart'.
+     * @param array  $picks     IDs de caballo elegidos (pick1, pick2, pick3, con null en los no usados).
+     * @param int    $winnerId  ID del caballo ganador.
+     * @param float  $dividend  Dividendo oficial del hipodromo.
      */
-    public static function breakdown(array $pred, array $result, array $rules): array
+    public static function score(string $mode, array $picks, int $winnerId, float $dividend): int
     {
-        $pts = static fn(string $k): int => (int) ($rules[$k] ?? 0);
-        $pred   = array_map('intval', array_values($pred));
-        $result = array_map('intval', array_values($result));
+        $stakes = self::stakes($mode);
+        foreach (array_values($picks) as $i => $horseId) {
+            if ($horseId === null || $horseId === '') {
+                continue;
+            }
+            if ((int) $horseId === $winnerId) {
+                $stake = (int) ($stakes[$i] ?? 0);
+                return (int) round($stake * $dividend);
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Desglose para mostrar al jugador: por cada caballo elegido,
+     * cuanto aposto, si fue el ganador y cuantos puntos sumo.
+     */
+    public static function breakdown(string $mode, array $picks, int $winnerId, float $dividend): array
+    {
+        $stakes = self::stakes($mode);
         $lines  = [];
-
-        // 1. Aciertos de posicion exacta.
-        $exactHits = 0;
-        for ($i = 0; $i < 3; $i++) {
-            if ($pred[$i] === $result[$i]) {
-                $exactHits++;
-                $lines[] = [
-                    'label'  => 'Acierto exacto del ' . self::$ordinals[$i] . ' puesto',
-                    'points' => $pts('exact_' . ($i + 1)),
-                ];
+        foreach (array_values($picks) as $i => $horseId) {
+            if ($horseId === null || $horseId === '') {
+                continue;
             }
+            $stake    = (int) ($stakes[$i] ?? 0);
+            $isWinner = ((int) $horseId === $winnerId);
+            $lines[] = [
+                'position'  => $i + 1,
+                'horse_id'  => (int) $horseId,
+                'stake'     => $stake,
+                'is_winner' => $isWinner,
+                'points'    => $isWinner ? (int) round($stake * $dividend) : 0,
+            ];
         }
-
-        // 2. Bonus por el podio completo en el orden exacto.
-        if ($exactHits === 3 && $pts('bonus_exact_podium') !== 0) {
-            $lines[] = ['label' => 'Bonus: podio exacto (1-2-3)', 'points' => $pts('bonus_exact_podium')];
-        }
-
-        // 3. Bonus por acertar los tres caballos del podio en cualquier orden.
-        $sortedPred = $pred;
-        $sortedRes  = $result;
-        sort($sortedPred);
-        sort($sortedRes);
-        if ($sortedPred === $sortedRes && $pts('bonus_any_order') !== 0) {
-            $lines[] = ['label' => 'Bonus: podio completo (cualquier orden)', 'points' => $pts('bonus_any_order')];
-        }
-
-        // 4. Caballos del podio acertados pero en una posicion equivocada.
-        for ($i = 0; $i < 3; $i++) {
-            $horse     = $pred[$i];
-            $inResult  = in_array($horse, $result, true);
-            $exactHere = ($result[$i] === $horse);
-            if ($inResult && !$exactHere && $pts('misplaced') !== 0) {
-                $lines[] = ['label' => 'Caballo del podio fuera de lugar', 'points' => $pts('misplaced')];
-            }
-        }
-
         return $lines;
     }
 }
