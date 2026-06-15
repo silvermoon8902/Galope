@@ -31,12 +31,14 @@
     <div class="race-body">
       <?php if ($eff === 'open'): ?>
         <p class="muted" style="margin-bottom:14px">
-          <?= $myNextPrediction
-              ? 'Ya cargaste tu prediccion. Podes cambiarla hasta que se cierre la carrera.'
-              : 'Todavia no cargaste tu prediccion para esta carrera.' ?>
+          <?php if ($myNextPrediction): ?>
+            Ya tenes jugada cargada en modalidad <b><?= e(Scoring::modeLabel((string) $myNextPrediction['mode'])) ?></b>. Podes cambiarla hasta el cierre.
+          <?php else: ?>
+            Todavia no cargaste tu jugada para esta carrera.
+          <?php endif; ?>
         </p>
         <a class="btn" href="<?= e(base('/race?id=' . $next['id'])) ?>">
-          <?= $myNextPrediction ? 'Ver o cambiar mi prediccion' : 'Cargar mi prediccion' ?>
+          <?= $myNextPrediction ? 'Ver o cambiar mi jugada' : 'Cargar mi jugada' ?>
         </a>
       <?php elseif ($eff === 'scheduled'): ?>
         <p class="muted">Las predicciones todavia no abrieron. Vas a poder jugar pronto.</p>
