@@ -14,7 +14,7 @@
   <?php if ($history): ?>
     <table class="table">
       <thead>
-        <tr><th>Carrera</th><th>Cierre de predicciones</th><th>Estado</th><th class="num">Puntos</th></tr>
+        <tr><th>Carrera</th><th>Modalidad</th><th>Cierre</th><th>Estado</th><th class="num">Puntos</th></tr>
       </thead>
       <tbody>
         <?php foreach ($history as $h): ?>
@@ -23,6 +23,7 @@
               <a href="<?= e(base('/race?id=' . $h['race_id'])) ?>"><?= e($h['race_name']) ?></a>
               <small><?= e($h['racetrack']) ?></small>
             </td>
+            <td><?= e(Scoring::modeLabel((string) $h['mode'])) ?></td>
             <td><?= e(fmt_dt($h['predictions_close_at'])) ?></td>
             <td>
               <?php if ($h['points_awarded'] !== null): ?>
