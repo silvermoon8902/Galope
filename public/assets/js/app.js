@@ -8,13 +8,10 @@
   /* ---- Cuenta regresiva al cierre de predicciones ---- */
   document.querySelectorAll('[data-remaining]').forEach(function (el) {
     var remaining = parseInt(el.getAttribute('data-remaining'), 10) || 0;
-
     function paint() {
       if (remaining <= 0) {
         el.textContent = 'Cerradas';
-        document.querySelectorAll('[data-lock-on-close]').forEach(function (n) {
-          n.disabled = true;
-        });
+        document.querySelectorAll('[data-lock-on-close]').forEach(function (n) { n.disabled = true; });
         var msg = document.getElementById('lock-msg');
         if (msg) { msg.style.display = 'block'; }
         return;
@@ -25,95 +22,134 @@
       el.textContent = pad(h) + ':' + pad(m) + ':' + pad(s);
       remaining--;
     }
-
     paint();
     setInterval(paint, 1000);
   });
 
-  /* ---- Eleccion del podio en la pagina de carrera ---- */
+  /* ---- Eleccion de modalidad + caballos en la pagina de carrera ---- */
   var form = document.getElementById('predict-form');
   if (form) {
-    var picks = [null, null, null];
-    var labels = ['1', '2', '3'];
-    var slotClass = ['p1', 'p2', 'p3'];
+    var MODES = {
+      full:  { label: 'Full Point',  stakes: [50] },
+      dual:  { label: 'Dual Point',  stakes: [25, 25] },
+      smart: { label: 'Smart Point', stakes: [30, 15, 5] }
+    };
+
+    var modeCards = document.querySelectorAll('.mode-card');
     var list = document.getElementById('horse-list');
+    var slotsBlock = document.getElementById('slots');
+    var slotsRow = document.getElementById('slotsRow');
     var summary = document.getElementById('pickSummary');
     var btn = document.getElementById('confirmBtn');
+    var modeInput = document.getElementById('modeInput');
 
-    (form.getAttribute('data-pre') || '').split(',').filter(Boolean).forEach(function (id, i) {
-      if (i < 3) { picks[i] = parseInt(id, 10); }
-    });
+    var currentMode = '';
+    var picks = [];
 
     function nameOf(id) {
       var row = list.querySelector('.horse[data-id="' + id + '"]');
       return row ? row.getAttribute('data-name') : '';
     }
 
+    function selectMode(mode) {
+      if (!MODES[mode]) { return; }
+      currentMode = mode;
+      modeInput.value = mode;
+      modeCards.forEach(function (card) {
+        card.classList.toggle('selected', card.getAttribute('data-mode') === mode);
+      });
+      var maxPicks = MODES[mode].stakes.length;
+      if (picks.length > maxPicks) { picks = picks.slice(0, maxPicks); }
+      slotsBlock.style.display = 'block';
+      render();
+    }
+
     function render() {
+      var stakes = MODES[currentMode] ? MODES[currentMode].stakes : [];
+
+      var html = '';
+      for (var i = 0; i < stakes.length; i++) {
+        var pid = picks[i];
+        var filled = pid ? ' filled' : '';
+        html += '<div class="pick-pill' + filled + '">' +
+                  '<span class="pp-stake">' + stakes[i] + '</span> ' +
+                  '<span class="pp-name">' + (pid ? nameOf(pid) : '...') + '</span>' +
+                '</div>';
+      }
+      slotsRow.innerHTML = html;
+
       list.querySelectorAll('.horse.selectable').forEach(function (row) {
         var id = parseInt(row.getAttribute('data-id'), 10);
         var at = picks.indexOf(id);
         var slot = row.querySelector('[data-slot]');
         row.classList.toggle('picked', at > -1);
-        slot.className = 'pick-slot' + (at > -1 ? ' filled ' + slotClass[at] : '');
-        slot.textContent = at > -1 ? labels[at] : '+';
+        if (at > -1) {
+          slot.className = 'pick-slot filled stake';
+          slot.textContent = stakes[at] || '';
+        } else {
+          slot.className = 'pick-slot';
+          slot.textContent = '+';
+        }
       });
 
-      if (picks.every(function (p) { return p === null; })) {
-        summary.textContent = 'Todavia no elegiste tu podio.';
+      var required = MODES[currentMode] ? MODES[currentMode].stakes.length : 0;
+      if (!currentMode) {
+        summary.textContent = 'Elegi una modalidad para empezar.';
+        btn.disabled = true;
+      } else if (picks.length === 0) {
+        summary.innerHTML = 'Modalidad: <b>' + MODES[currentMode].label + '</b>. Elegi tus caballos.';
+        btn.disabled = true;
+      } else if (picks.length < required) {
+        summary.innerHTML = 'Modalidad: <b>' + MODES[currentMode].label + '</b>. Te faltan ' + (required - picks.length) + ' caballo(s).';
+        btn.disabled = true;
       } else {
-        summary.innerHTML = 'Tu podio: <b>' + picks.map(function (p, i) {
-          return labels[i] + ' ' + (p ? nameOf(p) : '-');
-        }).join(' &middot; ') + '</b>';
+        summary.innerHTML = 'Modalidad: <b>' + MODES[currentMode].label + '</b> &middot; jugada lista.';
+        btn.disabled = false;
       }
 
       document.getElementById('pick1').value = picks[0] || '';
       document.getElementById('pick2').value = picks[1] || '';
       document.getElementById('pick3').value = picks[2] || '';
-      if (btn) { btn.disabled = !picks.every(function (p) { return p !== null; }); }
     }
 
-    list.querySelectorAll('.horse.selectable').forEach(function (row) {
-      row.addEventListener('click', function () {
-        var id = parseInt(row.getAttribute('data-id'), 10);
-        var at = picks.indexOf(id);
-        if (at > -1) {
-          picks[at] = null;
-        } else {
-          var free = picks.indexOf(null);
-          if (free === -1) { return; }
-          picks[free] = id;
-        }
-        render();
+    function togglePick(id) {
+      if (!currentMode) {
+        summary.textContent = 'Primero elegi una modalidad (Full / Dual / Smart Point).';
+        return;
+      }
+      var at = picks.indexOf(id);
+      if (at > -1) {
+        picks.splice(at, 1);
+      } else {
+        var max = MODES[currentMode].stakes.length;
+        if (picks.length >= max) { return; }
+        picks.push(id);
+      }
+      render();
+    }
+
+    modeCards.forEach(function (card) {
+      card.addEventListener('click', function () {
+        selectMode(card.getAttribute('data-mode'));
       });
     });
 
+    list.querySelectorAll('.horse.selectable').forEach(function (row) {
+      row.addEventListener('click', function () {
+        togglePick(parseInt(row.getAttribute('data-id'), 10));
+      });
+    });
+
+    var preMode = form.getAttribute('data-pre-mode') || '';
+    var prePicks = (form.getAttribute('data-pre-picks') || '').split(',').filter(Boolean);
+    if (preMode) {
+      selectMode(preMode);
+      picks = prePicks.map(function (s) { return parseInt(s, 10); }).filter(function (n) { return !isNaN(n); });
+    }
     render();
   }
 
-  /* ---- Vista previa en vivo de las reglas de puntuacion ---- */
-  var rulesForm = document.getElementById('rules-form');
-  if (rulesForm) {
-    var ruleVal = function (key) {
-      var el = rulesForm.querySelector('input[data-key="' + key + '"]');
-      return el ? (parseInt(el.value, 10) || 0) : 0;
-    };
-    var setText = function (id, value) {
-      var n = document.getElementById(id);
-      if (n) { n.textContent = value; }
-    };
-    var refresh = function () {
-      setText('pvPerfect', ruleVal('exact_1') + ruleVal('exact_2') + ruleVal('exact_3') +
-        ruleVal('bonus_any_order') + ruleVal('bonus_exact_podium'));
-      setText('pvWinner', ruleVal('exact_1'));
-    };
-    rulesForm.querySelectorAll('input[data-key]').forEach(function (i) {
-      i.addEventListener('input', refresh);
-    });
-    refresh();
-  }
-
-  /* ---- Alta y baja de caballos en el formulario de carrera ---- */
+  /* ---- Alta y baja de caballos en el formulario de carrera (admin) ---- */
   var addBtn = document.getElementById('addHorse');
   if (addBtn) {
     var rows = document.getElementById('horse-rows');
