@@ -1,7 +1,7 @@
 <?php
 /**
- * Ciclo de vida de las carreras: estado, bloqueo de predicciones, carga de
- * resultados y tabla de clasificacion.
+ * Ciclo de vida de las carreras: estado, bloqueo de predicciones, carga del
+ * resultado oficial (ganador + dividendo) y tabla de clasificacion.
  *
  * El bloqueo de predicciones es el punto de integridad del juego: una vez que
  * la carrera arranca, ninguna prediccion puede crearse ni modificarse. Esa
@@ -13,7 +13,7 @@ class RaceService
      * Estado efectivo de una carrera, combinando el estado guardado con el reloj:
      *  - scheduled : existe, las predicciones todavia no abrieron
      *  - open      : se pueden cargar y modificar predicciones
-     *  - locked    : ya cerro (llego la hora), falta el resultado
+     *  - locked    : ya cerro (llego la hora), falta cargar el resultado
      *  - finished  : resultado cargado y puntos asignados
      */
     public static function effectiveStatus(array $race): string
@@ -66,62 +66,54 @@ class RaceService
         return Database::one('SELECT * FROM race_results WHERE race_id = ?', [$raceId]);
     }
 
-    /** Reglas de puntuacion vigentes: mapa clave => puntos. */
-    public static function scoringRules(): array
-    {
-        $out = [];
-        foreach (Database::all('SELECT rule_key, points FROM scoring_rules') as $row) {
-            $out[$row['rule_key']] = (int) $row['points'];
-        }
-        return $out;
-    }
-
     /**
-     * Carga (o corrige) el resultado oficial de una carrera y dispara el motor
-     * de puntuacion sobre TODAS sus predicciones. Operacion atomica: si algo
-     * falla, no queda un resultado a medio aplicar.
+     * Carga (o corrige) el resultado oficial de una carrera: el caballo ganador y
+     * el dividendo oficial del hipodromo. Dispara el motor de puntuacion sobre
+     * TODAS las predicciones cerradas en una sola transaccion atomica.
      *
      * Se puede volver a llamar para corregir un resultado mal cargado; en ese
-     * caso vuelve a puntuar todas las predicciones con el resultado correcto.
+     * caso vuelve a puntuar todas las predicciones con los datos correctos.
      *
      * @return int cantidad de predicciones evaluadas.
      */
     public static function loadResult(
         int $raceId,
-        int $first,
-        int $second,
-        int $third,
+        int $winnerHorseId,
+        float $dividend,
         ?int $adminId,
         string $source = 'manual'
     ): int {
-        return Database::tx(function () use ($raceId, $first, $second, $third, $adminId, $source) {
+        return Database::tx(function () use ($raceId, $winnerHorseId, $dividend, $adminId, $source) {
             if (self::result($raceId) !== null) {
                 Database::run(
                     'UPDATE race_results
-                        SET first_horse_id = ?, second_horse_id = ?, third_horse_id = ?,
+                        SET winner_horse_id = ?, dividend = ?,
                             source = ?, entered_by = ?, entered_at = ?
                       WHERE race_id = ?',
-                    [$first, $second, $third, $source, $adminId, now(), $raceId]
+                    [$winnerHorseId, $dividend, $source, $adminId, now(), $raceId]
                 );
             } else {
                 Database::run(
                     'INSERT INTO race_results
-                        (race_id, first_horse_id, second_horse_id, third_horse_id, source, entered_by, entered_at)
-                     VALUES (?,?,?,?,?,?,?)',
-                    [$raceId, $first, $second, $third, $source, $adminId, now()]
+                        (race_id, winner_horse_id, dividend, source, entered_by, entered_at)
+                     VALUES (?,?,?,?,?,?)',
+                    [$raceId, $winnerHorseId, $dividend, $source, $adminId, now()]
                 );
             }
 
             Database::run('UPDATE races SET status = ? WHERE id = ?', ['finished', $raceId]);
 
-            $rules  = self::scoringRules();
-            $result = [$first, $second, $third];
-            $preds  = Database::all('SELECT * FROM predictions WHERE race_id = ?', [$raceId]);
+            $preds = Database::all('SELECT * FROM predictions WHERE race_id = ?', [$raceId]);
             foreach ($preds as $p) {
                 $points = Scoring::score(
-                    [$p['pick1_horse_id'], $p['pick2_horse_id'], $p['pick3_horse_id']],
-                    $result,
-                    $rules
+                    (string) $p['mode'],
+                    [
+                        $p['pick1_horse_id'],
+                        $p['pick2_horse_id'],
+                        $p['pick3_horse_id'],
+                    ],
+                    $winnerHorseId,
+                    (float) $dividend
                 );
                 Database::run(
                     'UPDATE predictions SET points_awarded = ?, updated_at = ? WHERE id = ?',
@@ -153,12 +145,11 @@ class RaceService
     /** Posicion de un jugador en la tabla (1 = lider). 0 si no esta. */
     public static function rankOf(int $userId): int
     {
-        $rank = 0;
         foreach (self::leaderboard(100000) as $i => $row) {
             if ((int) $row['id'] === $userId) {
                 return $i + 1;
             }
         }
-        return $rank;
+        return 0;
     }
 }
