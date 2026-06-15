@@ -1,5 +1,5 @@
 <?php
-/** Panel de administracion: carreras, resultados, reglas de puntuacion y usuarios. */
+/** Panel de administracion: carreras, resultados, reglas del juego y usuarios. */
 class AdminController
 {
     public function races(): void
@@ -62,7 +62,6 @@ class AdminController
         $existing       = $id ? RaceService::find($id) : null;
         $hasPredictions = $id ? $this->raceHasPredictions($id) : false;
 
-        // Recolecta los caballos cargados en el formulario.
         $horses = [];
         foreach ((array) ($_POST['horse_name'] ?? []) as $i => $hn) {
             $hn = trim((string) $hn);
@@ -114,8 +113,6 @@ class AdminController
                 );
             }
 
-            // Los caballos solo se reescriben mientras la carrera no tenga predicciones,
-            // para no dejar predicciones apuntando a caballos borrados.
             if (!$hasPredictions) {
                 Database::run('DELETE FROM horses WHERE race_id = ?', [$raceId]);
                 $number = 1;
@@ -172,6 +169,9 @@ class AdminController
         ]);
     }
 
+    /**
+     * Guarda el ganador + el dividendo oficial y dispara el motor de puntuacion.
+     */
     public function saveResult(): void
     {
         require_admin();
@@ -189,27 +189,30 @@ class AdminController
             redirect('/admin/result?id=' . $raceId);
         }
 
-        $picks = [
-            (int) ($_POST['first'] ?? 0),
-            (int) ($_POST['second'] ?? 0),
-            (int) ($_POST['third'] ?? 0),
-        ];
-        if (in_array(0, $picks, true) || count(array_unique($picks)) !== 3) {
-            flash('error', 'Selecciona tres caballos distintos para el podio.');
+        $winnerId = (int) ($_POST['winner_horse_id'] ?? 0);
+        $dividend = (float) str_replace(',', '.', (string) ($_POST['dividend'] ?? '0'));
+
+        if ($winnerId === 0) {
+            flash('error', 'Selecciona el caballo ganador.');
+            redirect('/admin/result?id=' . $raceId);
+        }
+        if ($dividend <= 0) {
+            flash('error', 'El dividendo oficial debe ser mayor a cero.');
             redirect('/admin/result?id=' . $raceId);
         }
         $validIds = array_map(static fn($h) => (int) $h['id'], RaceService::horses($raceId));
-        foreach ($picks as $pick) {
-            if (!in_array($pick, $validIds, true)) {
-                flash('error', 'Un caballo del resultado no pertenece a esta carrera.');
-                redirect('/admin/result?id=' . $raceId);
-            }
+        if (!in_array($winnerId, $validIds, true)) {
+            flash('error', 'El caballo ganador no pertenece a esta carrera.');
+            redirect('/admin/result?id=' . $raceId);
         }
 
         $count = RaceService::loadResult(
-            $raceId, $picks[0], $picks[1], $picks[2], (int) current_user()['id'], 'manual'
+            $raceId, $winnerId, $dividend, (int) current_user()['id'], 'manual'
         );
-        flash('success', "Resultado cargado. El motor de puntuacion evaluo $count prediccion(es) y actualizo la clasificacion.");
+        flash(
+            'success',
+            "Resultado cargado con dividendo $dividend. El motor evaluo $count prediccion(es) y actualizo la clasificacion."
+        );
         redirect('/admin');
     }
 
@@ -217,26 +220,17 @@ class AdminController
     {
         require_admin();
         view('admin/scoring', [
-            'title' => 'Reglas de puntuacion - Panel',
-            'rules' => Database::all('SELECT * FROM scoring_rules ORDER BY sort_order'),
+            'title' => 'Reglas del juego - Panel',
+            'modes' => Scoring::modes(),
         ]);
     }
 
+    /** Conservado por compatibilidad: en el modelo actual las reglas son fijas. */
     public function saveScoring(): void
     {
         require_admin();
         csrf_check();
-        $points = (array) ($_POST['points'] ?? []);
-        foreach (Database::all('SELECT rule_key FROM scoring_rules') as $rule) {
-            $key = $rule['rule_key'];
-            if (isset($points[$key])) {
-                Database::run(
-                    'UPDATE scoring_rules SET points = ?, updated_at = ? WHERE rule_key = ?',
-                    [max(0, (int) $points[$key]), now(), $key]
-                );
-            }
-        }
-        flash('success', 'Reglas de puntuacion guardadas. Se aplican a las carreras que se resuelvan de ahora en mas.');
+        flash('info', 'Las reglas del juego estan definidas por las modalidades Full / Dual / Smart Point y el dividendo oficial del hipodromo. No hay valores editables aqui.');
         redirect('/admin/scoring');
     }
 
