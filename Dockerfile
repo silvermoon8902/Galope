@@ -7,11 +7,14 @@ RUN apt-get update \
     && docker-php-ext-install pdo_mysql mbstring \
     && rm -rf /var/lib/apt/lists/*
 
-# mod_php requiere mpm_prefork. Las versiones nuevas de la imagen base
-# habilitan mpm_event por defecto, lo que causa "More than one MPM loaded".
-RUN a2dismod mpm_event 2>/dev/null || true; \
-    a2dismod mpm_worker 2>/dev/null || true; \
-    a2enmod mpm_prefork
+# mod_php requiere mpm_prefork como UNICO MPM. Manipulamos los symlinks
+# directamente para no depender del estado previo de a2dismod/a2enmod
+# (que en builds cacheados puede dejar mas de un MPM cargado).
+RUN rm -f /etc/apache2/mods-enabled/mpm_event.load   /etc/apache2/mods-enabled/mpm_event.conf \
+          /etc/apache2/mods-enabled/mpm_worker.load  /etc/apache2/mods-enabled/mpm_worker.conf \
+    && ln -sf ../mods-available/mpm_prefork.load /etc/apache2/mods-enabled/mpm_prefork.load \
+    && ln -sf ../mods-available/mpm_prefork.conf /etc/apache2/mods-enabled/mpm_prefork.conf \
+    && echo "MPM enabled:" && ls /etc/apache2/mods-enabled/mpm_*
 
 # Servir desde public/ y dejar que .htaccess maneje el ruteo.
 RUN a2enmod rewrite \
