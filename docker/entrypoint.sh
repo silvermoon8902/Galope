@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 # Entrypoint del contenedor de Galope:
-#   1. Apache escucha en el puerto que asigna la plataforma ($PORT).
-#   2. Espera a que la base de datos responda.
-#   3. Crea el esquema y los datos de ejemplo en el primer arranque.
-#   4. Arranca Apache.
+#   1. Espera a que la base de datos responda.
+#   2. Crea el esquema y los datos de ejemplo en el primer arranque.
+#   3. Arranca el servidor embebido de PHP en el puerto que asigna la plataforma.
 
-PORT="${PORT:-80}"
-sed -ri "s/^Listen 80$/Listen ${PORT}/" /etc/apache2/ports.conf
-sed -ri "s/<VirtualHost \*:80>/<VirtualHost *:${PORT}>/" /etc/apache2/sites-available/000-default.conf
+PORT="${PORT:-8080}"
 
 echo "Galope: esperando la base de datos..."
 ready=0
@@ -24,4 +21,5 @@ done
 # Crea esquema + datos de ejemplo en el primer arranque; no hace nada si ya existen.
 php /var/www/html/bin/migrate.php || true
 
-exec apache2-foreground
+echo "Galope: iniciando servidor en 0.0.0.0:${PORT}"
+exec php -S "0.0.0.0:${PORT}" -t /var/www/html/public /var/www/html/public/index.php
